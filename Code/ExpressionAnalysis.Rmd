@@ -1,0 +1,132 @@
+---
+title: "MB250 Microarray Data - Rspondin KI without infection in stomach corpus - DGE Reanalysis with LIMMA"
+author: "Hilmar Berger"
+output: 
+ html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: false
+    number_sections: true
+    code_folding: hide
+    
+pdf_document:
+    fig_caption: true
+date: "`r format(Sys.time(), '%d %B, %Y %H:%M:%S')`"
+---
+
+```{r, echo=FALSE, results='hide', messages=FALSE}
+rm(list=ls())
+suppressMessages(library(limma))
+suppressMessages(library(xlsx))
+suppressMessages(library(pheatmap))
+library(xtable)
+library(reshape2)
+
+load("../Data/Processed/MB250_Corpus_Rspo_KI_and_KO_with_or_wo_Hp_micro_array_preprocessed_data.Rdata")
+
+result_folder = "../Results/"
+if (!file.exists(result_folder)) dir.create(result_folder, recursive=T)
+```
+
+# Introduction
+
+This is data from a stomach corpus samples of mouse experiments (Rspo KI, no infection) hybridized as dual channel libraries to Agilent 014568 micro arrays. 
+
+
+# Diffential gene expression
+
+Standard dual-channel analysis of differential expression data using LIMMA is applied for comparisons. 
+
+We do the following comparisons: 
+
+  - Rspo3 KI vs. WT in mice after 14d without infection
+
+```{r}
+all_results = list()
+
+controls = MA$genes$ControlType!=0
+MA.avg <- avereps(MA[!controls,], ID=MA[!controls,]$genes$ProbeName)
+
+```
+
+```{r}
+#######################################################################
+sel_samples = rownames(subset(ed, Experiment == "Rspo KI vs WT 14d non infected"))
+ed_tmp = ed[sel_samples,]
+design = ifelse(ed_tmp$Cy5_condition=="Rspo3 KI", 1, -1)
+fit <- lmFit(MA.avg[,sel_samples], design)
+fit <- eBayes(fit)
+res = topTable(fit, adjust = "BH",number=nrow(fit))
+
+# ratio_tab = sweep(MA.avg[,sel_samples]$M, 2, design, "*")
+# colnames(ratio_tab) = ed_tmp$array_label
+# res = merge(res, ratio_tab, all.x=T, by.x="ProbeName", by.y=0, sort=F)
+all_results[["Rspo_KI_vs_WT_14d_non_infected"]] = res
+```
+
+## Volcano plots
+
+Due to the small replicate number no genes in any of the comparisons reached a significance level of FDR < 5%. We here therefore show unadjusted (raw) p-values noting that **a large part or all of them might be false positive calls**.
+
+```{r, volcano, echo=FALSE, fig.width=8, fig.height=8}
+all_target_conditions = names(all_results)
+par(mfrow=c(1,1), mar=c(8,4,4,2))
+
+for (tc in all_target_conditions) {
+  r = all_results[[tc]]
+  #plot(r$logFC, -log10(r$adj.P.Val),xlab="log2 Fold Change",ylab="-log10(adj. p-val)", ylim=c(0,max(2,max(-log10(r$adj.P.Val),na.rm=T))))
+  plot(r$logFC, -log10(r$P.Value),xlab="log2 Fold Change",ylab="-log10(raw p-val)", ylim=c(0,max(2,max(-log10(r$P.Value),na.rm=T))))
+  #title(main=tc, sub=paste("(",nrow(subset(r, adj.P.Val < 0.05))," signif. DE genes)",sep="") )
+  title(main=tc, sub=paste("(",nrow(subset(r, P.Value < 0.05))," signif. DE genes)",sep="") )
+  abline(h=-log10(0.05),col="red")
+  abline(v=c(-1,1))
+}
+```
+
+
+```{r, echo=FALSE}
+R.avg <- avereps(RG$R, ID=RG$genes$ProbeName)
+G.avg <- avereps(RG$G, ID=RG$genes$ProbeName)
+colnames(R.avg) = paste(ed[colnames(R.avg),]$Cy5,"_Cy5_label",sep="")
+colnames(G.avg) = paste(ed[colnames(G.avg),]$Cy3,"_Cy3_label",sep="")
+
+intensity_matrix = cbind(R.avg, G.avg)
+norm_intensity_matrix = normalizeBetweenArrays(intensity_matrix, method="quantile")
+```
+
+
+```{r, write_tabs, echo=FALSE}
+###############################################################################################################
+# Write Result Files
+###############################################################################################################
+
+
+output_file_prefix = paste(result_folder,"Differential_expression_results_", sep="/")
+selected_cols = c("ProbeName", "GeneSymbol", "GeneName","EntrezID","logFC","AveExpr","t","P.Value","adj.P.Val","GencodeM12MappingStatus","GeneSymbol_Gencode","Transcript_Type" )
+for (tc in all_target_conditions) {
+  write.table(all_results[[tc]][,selected_cols], file=paste(output_file_prefix, tc, ".txt", sep="" ), row.names=F , sep="\t", dec=".")
+}
+
+##############################################
+# Normalized expression values per sample
+anno = unique(RG$genes[,!colnames(RG$genes) %in% c("Row","Col","Start","index")])
+rownames(anno) = anno$ProbeName
+norm_exp_mat = data.frame(ProbeName = rownames(norm_intensity_matrix), log2(norm_intensity_matrix), row.names=NULL, stringsAsFactors = F)
+norm_exp_mat$GeneSymbol = anno[as.character(norm_exp_mat$ProbeName), "GeneSymbol"]
+filename = paste(result_folder,"Normalized_expression_data.txt",sep="/")
+write.table(norm_exp_mat, file=filename,sep="\t",row.names=F)
+
+```
+
+
+```{r}
+filename = paste(result_folder,"DGE_results.Rdata",sep="/")
+exp_design = ed
+save(all_results, exp_design, norm_intensity_matrix, MA.n, file=filename)
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,12 @@
+Data files required for analysis are provided in Data folder and referenced from R scripts in Code/...
+
+Fig 4b:
+- Microarray data was preprocessed according to Code/Preprocess_raw_files.Rmd
+- Differential gene expression was calculated according to script Code/ExpressionAnalysis.Rmd
+- GSEA was run on DGE results using script Code/GSEA_Analaysis.Rmd and GSEA plots were generated using Code/GSEA_plots.Rmd
+- Figure is in Results/ [Rspo_KI_vs_WT_14d_non_infected_Lgr5_SC_Signature_Munoz.pdf]
+
+
+
+
+
